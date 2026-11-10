@@ -1,0 +1,133 @@
+============================================================
+Phase 3: 判定器の実装
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  Phase 2 で計算した特徴量をもとに、4つの動作を検出する判定器を
+  ルールベースで実装する。実装順は検出の容易さ順:
+  1. 首の縦振り（うなずき）/ 首の横振り
+  2. 手を横に振るNO
+  3. 手を差し出す
+
+■ 共通設計 (detectors/base.py)
+
+  BaseDetector クラス:
+  - window_sec (1.5秒): スライディングウィンドウ幅
+  - cooldown_sec (1.5秒): 検出後の抑制期間（連続検出を防ぐ）
+  - smooth_n (5): 移動平均のフレーム数
+
+  SignalBuffer クラス:
+  - 1次元の時系列信号を管理するリングバッファ
+  - add(): 値を追加し、ウィンドウ外を自動削除
+  - get_smoothed(): 移動平均による平滑化
+  - count_reversals(min_amplitude): 指定振幅以上の折り返し回数を計算
+    → 極値（山と谷）を検出し、隣接する極値間の差が min_amplitude 以上の
+       ものだけをカウントする
+  - get_range(): ウィンドウ内の値域（max - min）
+  - get_std(): 標準偏差
+
+■ 判定器1: 首の縦振り HeadNodDetector (detectors/head.py)
+
+  入力: head_pitch, head_yaw（度）
+  アルゴリズム:
+    1. pitch と yaw を各 SignalBuffer に追加
+    2. pitch の折り返し回数を計算（min_amplitude=6°）
+    3. yaw の range を計算
+    4. pitch の折り返し >= 2回 かつ yaw_range <= 12° → "nod" を検出
+
+  パラメータ:
+  - min_amplitude: 6.0° (記録データで pitch range=24° → 半振幅12°, 余裕を見て6°)
+  - min_reversals: 2
+  - max_yaw_range: 12.0° (shake 時 yaw range=36.8° vs nod 時=5.7° → 12°で分離)
+
+■ 判定器2: 首の横振り HeadShakeDetector (detectors/head.py)
+
+  入力: head_pitch, head_yaw（度）
+  アルゴリズム: nod の逆。yaw の折り返しをカウントし、pitch の range が小さい
+    yaw 折り返し >= 2回 かつ pitch_range <= 8° → "shake" を検出
+
+  パラメータ:
+  - min_amplitude: 6.0°
+  - min_reversals: 2
+  - max_pitch_range: 8.0° (nod 時 pitch range=24° vs shake 時=3.6° → 8°で分離)
+
+■ 判定器3: 手を横に振るNO WaveNoDetector (detectors/wave_no.py)
+
+  入力: 特徴量辞書（left/right_hand_wrist_x, left/right_hand_size,
+        left/right_hand_wrist_y）
+  アルゴリズム:
+    1. 手首 x 座標を手の大きさで正規化（カメラ距離の影響を除去）
+    2. 正規化後の x を SignalBuffer に追加
+    3. 折り返し回数を計算（min_amplitude=0.5）
+    4. 手首の y 座標が顔〜胸の高さ範囲内か確認（バイバイ除外）
+    5. 折り返し >= 2回 かつ 高さ範囲内 → "wave_no" を検出
+
+  パラメータ:
+  - min_amplitude: 0.5（手の大きさで正規化後）
+  - min_reversals: 2
+  - max_wrist_y: 0.85（腰より下を除外）
+  - min_wrist_y: 0.2（頭より上を除外 = バイバイ圏）
+
+■ 判定器4: 手を差し出す OfferDetector (detectors/offer.py)
+
+  入力: 特徴量辞書（left/right_elbow_angle, hand_gesture）
+  アルゴリズム:
+    1. 肘角度の履歴を保持（直近3秒分）
+    2. 条件をすべて満たすとき "offer" を検出:
+       (a) 現在の肘角度 >= 140°（腕が伸びている）
+       (b) 直近2秒以内に角度 < 110° の時点があった（曲がっていた→伸びた遷移）
+       (c) 直近 400ms の角度変動 <= 5°（静止している）
+       (d) 直近 400ms すべてで角度 >= 140°
+    3. Open_Palm が検出されていれば確度ボーナス（現時点では未使用）
+
+  パラメータ:
+  - elbow_threshold: 140°
+  - hold_duration_ms: 400ms
+  - elbow_change_threshold: 30°（遷移とみなす差）
+  - still_tolerance: 5°
+  - cooldown_sec: 2.0（他より長めに設定）
+
+■ 統合 (main.py の変更点)
+
+  - 4つの判定器を生成し、毎フレーム update() を呼ぶ
+  - 検出時に画面中央にラベルを 1.5 秒間表示（黒背景+カラーテキスト）
+  - コンソールにも「>> 検出: nod」等を出力
+
+■ オフライン検証スクリプト (verify_detectors.py)
+
+  記録済み CSV を読み込み、全フレームに対して判定器を実行。
+  - 各検出が正しいラベル区間で起きたか (OK/MISS) を表示
+  - ラベルごとの検出回数・誤検出回数を集計
+
+  使い方:
+    python verify_detectors.py data/recording_YYYYMMDD_HHMMSS.csv
+
+■ 初回オフライン検証結果（recording_20261110_173028.csv, 517フレーム）
+
+  検出数: 8, 正解: 5, 精度: 62.5%
+
+  nod:     検出5回（うち正解3回、誤検出2回）
+  shake:   検出2回（正解2回、誤検出0回）
+  wave_no: 検出1回（誤検出1回、対象区間では未検出）
+  offer:   検出0回
+
+  → 首振り系（nod/shake）は概ね動作。wave_no と offer は閾値調整が必要。
+    データを追加収集し、Phase 4 で閾値チューニングと誤検出対策を行う。
+
+■ 実行方法
+
+  リアルタイム:
+    > cd gesture
+    > ..\venv\Scripts\python main.py
+    動作すると画面中央に検出結果が表示される
+
+  オフライン検証:
+    > ..\venv\Scripts\python verify_detectors.py data/recording_XXXX.csv
+
+■ 今後の調整ポイント
+  - nod: none 区間での誤検出あり → cooldown 延長 or 振幅閾値を上げる
+  - wave_no: 手の大きさ正規化後の振幅閾値(0.5)が適切か再検討
+  - offer: 肘角度の閾値(140°)が高すぎる可能性。記録データでの最大値は
+    150°程度なので、130°に下げることを検討
+  - 全般: データを複数回記録し、動作ごとの特徴量分布を十分に把握する

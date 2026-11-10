@@ -1,0 +1,81 @@
+============================================================
+Phase 0: 環境構築
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  MediaPipe Tasks API を用いた動作認識プログラムの開発環境を構築する。
+
+■ 実施内容
+
+1. Python バージョン確認
+   - Python 3.13.14（Windows 11, Microsoft Store 版）を使用
+   - MediaPipe 1.2.2 が Python 3.13 に対応していることを確認
+
+2. 仮想環境の作成
+   - プロジェクトルートで以下を実行:
+     > python -m venv venv
+   - 有効化:
+     > venv\Scripts\activate    (Windows CMD)
+     > source venv/Scripts/activate  (Git Bash)
+
+3. パッケージのインストール
+   - 以下のコマンドで一括インストール:
+     > pip install mediapipe opencv-python numpy matplotlib
+   - インストールされたバージョン:
+     - mediapipe    1.2.2
+     - opencv-python 5.0.0.93
+     - numpy        2.5.4
+     - matplotlib   3.11.2
+   - requirements.txt を作成済み。再現時は以下で可能:
+     > pip install -r requirements.txt
+
+4. モデルファイルのダウンロード
+   - 以下の3つのモデルを gesture/models/ ディレクトリに配置:
+     (a) face_landmarker.task (約3.6MB)
+         顔の478点ランドマーク検出 + 顔の変換行列出力
+         取得元: https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+     (b) pose_landmarker_lite.task (約5.5MB)
+         体の33点ランドマーク検出（Lite版）
+         取得元: https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+     (c) gesture_recognizer.task (約8.0MB)
+         手のジェスチャー認識 + 手の21点ランドマーク検出
+         取得元: https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task
+   - .gitignore で .task ファイルをバージョン管理対象外に設定
+     （大容量バイナリのため。再現時は上記 URL から再取得する）
+
+5. プロジェクトディレクトリ構成
+   MediaPipe/
+   ├── .gitignore
+   ├── requirements.txt
+   ├── docs/                  ← 各 Phase の説明ドキュメント
+   ├── gesture/
+   │   ├── main.py            ← メインループ（Phase 1 で実装）
+   │   ├── trackers.py        ← MediaPipe 3タスクのラッパー
+   │   ├── features.py        ← 特徴量計算（Phase 2 以降）
+   │   ├── recorder.py        ← CSV 記録（Phase 2 以降）
+   │   ├── detectors/         ← 動作判定器（Phase 3 以降）
+   │   │   ├── head.py
+   │   │   ├── wave_no.py
+   │   │   └── offer.py
+   │   └── models/            ← .task モデルファイル
+   │       ├── face_landmarker.task
+   │       ├── pose_landmarker_lite.task
+   │       └── gesture_recognizer.task
+   └── venv/                  ← Python 仮想環境（Git 管理外）
+
+6. モデル読み込みテスト
+   - 3タスク（FaceLandmarker, PoseLandmarker, GestureRecognizer）を
+     VIDEO モードで生成し、正常にロード・クローズできることを確認
+   - 注意点: プロジェクトパスに日本語（デスクトップ/卒論）が含まれるため、
+     MediaPipe の C ライブラリが model_asset_path でファイルを開けない問題が発生。
+     対策として model_asset_buffer（Python 側でバイト列として読み込んでから渡す）
+     方式を採用した。
+
+■ 再現手順（まとめ）
+  1. Python 3.13 以上をインストール
+  2. リポジトリを clone
+  3. python -m venv venv && venv\Scripts\activate
+  4. pip install -r requirements.txt
+  5. gesture/models/ に上記3つの .task ファイルをダウンロード配置
+  6. python gesture/main.py で実行

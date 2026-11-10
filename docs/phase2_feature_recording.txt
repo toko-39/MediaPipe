@@ -1,0 +1,111 @@
+============================================================
+Phase 2: 特徴量の計算と記録
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  MediaPipe の3タスクの出力から、動作認識に必要な特徴量を毎フレーム計算する。
+  キー操作でラベル（動作名）を付けながらCSVに記録し、あとからグラフで
+  波形を確認して閾値の当たりをつける。
+
+■ 実装ファイル
+
+1. gesture/features.py — 特徴量計算モジュール
+   以下の特徴量を毎フレーム計算する（全29カラム）:
+
+   [頭の回転] (Face Landmarker の facial_transformation_matrixes から算出)
+   - head_pitch: 上下の傾き [度]。うなずきで変化する軸
+   - head_yaw:   左右の回転 [度]。首横振りで変化する軸
+   - head_roll:  傾き [度]。参考値
+
+   算出方法: 4x4変換行列の左上3x3回転部分から、XYZ順のオイラー角を計算。
+   R[2,1]/R[2,2] → pitch, -R[2,0]/sy → yaw, R[1,0]/R[0,0] → roll
+
+   [肘の角度] (Pose Landmarker の正規化画像座標から算出)
+   - left_elbow_angle:  左肘の角度（肩-肘-手首の3点角度）[度]
+   - right_elbow_angle: 右肘の角度 [度]
+   → 手を差し出す動作で肘が伸びる（150度以上）ことを検出するため
+
+   [手首の位置] (Pose Landmarker)
+   - left_wrist_x/y:  左手首の正規化画像座標 (0〜1)
+   - right_wrist_x/y: 右手首の正規化画像座標 (0〜1)
+   - left_wrist_shoulder_dist:  左手首-左肩の距離（肩幅で正規化）
+   - right_wrist_shoulder_dist: 右手首-右肩の距離（肩幅で正規化）
+   - shoulder_width: 肩幅（正規化座標での距離）
+   → カメラとの距離に依存しない相対的な手の位置を得るため
+
+   [手の特徴量] (Gesture Recognizer、左右各8項目)
+   - {left,right}_hand_gesture:       ジェスチャーラベル (Open_Palm等)
+   - {left,right}_hand_gesture_score: ジェスチャーの確信度
+   - {left,right}_hand_wrist_x/y:     手のランドマーク上の手首位置
+   - {left,right}_hand_size:           手の大きさ (手首→中指付け根の距離)
+   - {left,right}_palm_normal_x/y/z:  手のひらの法線ベクトル
+
+   手のひらの法線の算出方法:
+     v1 = 手首(0) → 人差し指付け根(5) のベクトル
+     v2 = 手首(0) → 小指付け根(17) のベクトル
+     法線 = v1 × v2（外積）を正規化
+   → 手のひらの向きから「NO」とバイバイを区別するため
+
+2. gesture/recorder.py — CSV記録モジュール
+   - Recorder クラス: 特徴量辞書を蓄積し、ラベルを付けてCSVに保存
+   - LABEL_KEYS 辞書: キーコードとラベル名の対応
+     1→nod, 2→shake, 3→offer, 4→wave_no, 0→none
+   - auto_filepath(): タイムスタンプ付きファイル名を自動生成
+   - 保存先: gesture/data/ ディレクトリ（自動作成）
+
+3. gesture/main.py — メインループ（Phase 1 から拡張）
+   追加機能:
+   - 毎フレーム compute_all() で特徴量を計算
+   - 右上に head_pitch / head_yaw をリアルタイム表示
+   - 'r' キーで記録の開始/停止をトグル
+   - 数字キー(0-4)でラベルを切り替え
+   - 停止時にCSVを自動保存
+   - 画面下部に記録状態・ラベル・フレーム数を表示
+
+4. gesture/plot_recording.py — 記録データの可視化スクリプト
+   - CSVを読み込み、4段のグラフを表示:
+     (1) 頭の Pitch / Yaw
+     (2) 肘角度（左右）
+     (3) 手首 X 座標（Pose）
+     (4) 手首 X 座標（Hand Landmark）
+   - ラベル区間を背景色で色分け表示
+   - pandas を使用（requirements.txt に追加済み）
+
+■ CSVカラム一覧（30列）
+   timestamp_ms, head_pitch, head_yaw, head_roll,
+   left_elbow_angle, right_elbow_angle,
+   left_wrist_x, left_wrist_y, right_wrist_x, right_wrist_y,
+   left_wrist_shoulder_dist, right_wrist_shoulder_dist, shoulder_width,
+   left_hand_gesture, left_hand_gesture_score,
+   left_hand_wrist_x, left_hand_wrist_y, left_hand_size,
+   left_palm_normal_x, left_palm_normal_y, left_palm_normal_z,
+   right_hand_gesture, right_hand_gesture_score,
+   right_hand_wrist_x, right_hand_wrist_y, right_hand_size,
+   right_palm_normal_x, right_palm_normal_y, right_palm_normal_z,
+   label
+
+■ データ記録の操作手順
+  1. python main.py でカメラ映像を起動
+  2. 数字キーで記録したい動作のラベルを選択
+     (1=nod, 2=shake, 3=offer, 4=wave_no, 0=none)
+  3. 'r' を押して記録開始
+  4. カメラの前で対象の動作を実演（途中でラベル切り替え可能）
+  5. 再度 'r' を押して記録停止 → data/ にCSVが自動保存される
+  6. 各動作を複数回・複数セッション記録する
+
+■ グラフ表示の手順
+  > python plot_recording.py data/recording_YYYYMMDD_HHMMSS.csv
+
+  グラフ上でラベル区間が色分けされるので、各動作時に
+  どの特徴量がどう変化するか目視で確認し、Phase 3 の閾値を決める。
+
+■ 確認すべき項目（データ記録時）
+  - [ ] head_pitch がうなずき時に明確に振動しているか
+  - [ ] head_yaw が首横振り時に明確に振動しているか
+  - [ ] 手を差し出す時に肘角度が増加し、手首位置が変化するか
+  - [ ] 手を横に振るNO時に hand_wrist_x が左右に振動しているか
+  - [ ] 各特徴量の振幅・周期から、適切な閾値・ウィンドウ幅の目安が得られるか
+
+■ 依存パッケージの追加
+  - pandas>=2.0.0 を requirements.txt に追加

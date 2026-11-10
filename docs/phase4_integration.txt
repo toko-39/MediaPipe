@@ -1,0 +1,116 @@
+============================================================
+Phase 4: 統合と誤検出対策
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  Phase 3 で実装した4つの判定器を統合し、誤検出を減らす対策を行う。
+  閾値の調整をコード変更なしで行えるようにする。
+
+■ 実施内容
+
+1. 閾値の設定ファイル外出し (config.py)
+   全判定器のパラメータを config.py に集約し、コードを変更せずに
+   数値を調整するだけでチューニング可能にした。
+
+   現在の設定値:
+
+   [共通]
+   window_sec    = 1.5    スライディングウィンドウ幅(秒)
+   smooth_n      = 5      移動平均のフレーム数
+
+   [うなずき (nod)]
+   min_amplitude = 6.0°   pitch の折り返し最小振幅
+   min_reversals = 3      必要な折り返し回数(1.5往復)
+   max_yaw_range = 12.0°  yaw の許容 range
+   cooldown_sec  = 1.5
+
+   [首横振り (shake)]
+   min_amplitude = 6.0°   yaw の折り返し最小振幅
+   min_reversals = 3      必要な折り返し回数(1.5往復)
+   max_pitch_range = 8.0° pitch の許容 range
+   cooldown_sec  = 1.5
+
+   [手を横に振るNO (wave_no)]
+   min_amplitude   = 0.3   手の大きさ正規化後の指先x振幅
+   min_reversals   = 3     必要な折り返し回数(2往復分)
+   max_wrist_y     = 0.85  指先y上限(腰より下を除外)
+   min_wrist_y     = 0.2   指先y下限(頭より上=バイバイ圏を除外)
+   palm_up_reject  = 0.5   掌上向き時の除外閾値
+   cooldown_sec    = 1.5
+
+   [手を差し出す (offer)]
+   palm_up_threshold = 0.4   掌上向き判定の閾値
+   hold_duration_ms  = 300   静止を要求する時間(ms)
+   still_tolerance   = 0.06  手首位置の変動許容(正規化座標)
+   cooldown_sec      = 2.0
+
+2. 同時検出の優先度制御 (main.py)
+   複数の動作が同時に検出された場合の処理:
+   - 手の動作(wave_no, offer) > 首の動作(nod, shake)
+   - wave_no 検出時 → 同フレームの shake を抑制
+   - offer 検出時 → 同フレームの nod を抑制
+   理由: 手の動作のほうが意図的で情報量が多いため
+
+3. 誤検出対策（Phase 3 からの累積）
+
+   (a) nod/shake の誤検出対策:
+       - 折り返し回数を 2→3 に引き上げ (1.5往復必要)
+       - 明確な往復運動でないと検出されない
+
+   (b) wave_no の誤検出対策:
+       - 手首→指先(人差し指・中指・薬指の平均)に変更し感度向上
+       - 折り返し3回(2往復分)を要求
+       - 掌が上向き(|palm_normal_y|>0.5)の場合は除外
+         → offer 動作中の腕の移動を wave_no と誤検出しない
+       - バッファ最低8フレームを要求
+
+   (c) offer の誤検出対策:
+       - 肘角度ベース → 掌上向き+静止ベースに全面変更
+       - 掌の向き(palm_normal_y)と手首の静止で判定
+       - wave_no との排他: wave_no 側で palm_up を除外条件に
+
+4. 検出結果の日本語表示
+   - nod → 「はい」(緑)
+   - shake → 「いいえ」(オレンジ)
+   - wave_no → 「戻る」(紫)
+   - offer → 「ください」(水色)
+   - メイリオ太字フォントで画面右下に表示
+   - Pillow (PIL) を使用して日本語レンダリング
+
+■ ディレクトリ構成（Phase 4 時点）
+   gesture/
+   ├── main.py              カメラループ・描画・検出・記録
+   ├── config.py             閾値パラメータ設定
+   ├── trackers.py           MediaPipe 3タスクのラッパー
+   ├── features.py           特徴量計算
+   ├── recorder.py           CSV記録
+   ├── plot_recording.py     記録データの可視化
+   ├── verify_detectors.py   オフライン検証
+   ├── detectors/
+   │   ├── __init__.py
+   │   ├── base.py           共通基底(SignalBuffer, BaseDetector)
+   │   ├── head.py           うなずき・首横振り
+   │   ├── wave_no.py        手を横に振るNO
+   │   ├── offer.py          手を差し出す
+   │   └── point.py          指さし(保留)
+   ├── models/               .task モデルファイル
+   └── data/                 記録CSV
+
+■ チューニング手順
+  1. gesture/config.py を開く
+  2. 対象パラメータの数値を変更して保存
+  3. python main.py を再起動
+  → コードの変更は不要
+
+  例: うなずきが検出されにくい場合
+    → NOD["min_amplitude"] を 6.0 → 4.0 に下げる
+  例: 日常動作で nod が誤検出される場合
+    → NOD["min_reversals"] を 3 → 4 に上げる
+    → NOD["max_yaw_range"] を 12.0 → 8.0 に下げる
+
+■ 今後の課題
+  - 別の人物でのテスト（体格・動作のクセによる閾値調整）
+  - 長時間実行での安定性確認
+  - 認識結果の外部出力（ロボット連携等、用途決定後）
+  - 指さし認識（保留中、detectors/point.py に実装済み）

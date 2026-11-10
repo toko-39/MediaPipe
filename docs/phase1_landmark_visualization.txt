@@ -1,0 +1,85 @@
+============================================================
+Phase 1: 3タスク同時実行とランドマーク可視化
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  OpenCV で Web カメラの映像を取得し、MediaPipe の Face Landmarker /
+  Pose Landmarker / Gesture Recognizer の3タスクを毎フレーム同時に実行する。
+  各ランドマークを映像上に描画し、FPS を表示して処理速度を確認する。
+
+■ 実装ファイル
+
+1. gesture/trackers.py — MediaPipe タスクのラッパー
+   - create_face_landmarker(): Face Landmarker を VIDEO モードで生成
+     - num_faces=1
+     - output_facial_transformation_matrixes=True（頭の回転行列を取得するため）
+     - output_face_blendshapes=False（不要なため無効化）
+   - create_pose_landmarker(): Pose Landmarker (Lite) を VIDEO モードで生成
+     - num_poses=1
+   - create_gesture_recognizer(): Gesture Recognizer を VIDEO モードで生成
+     - num_hands=2（両手検出）
+   - 共通: model_asset_buffer 方式でモデルをバイト列として読み込み
+     （日本語パス対策、Phase 0 で発見した問題への対処）
+
+2. gesture/main.py — カメラループ・描画・FPS 表示
+   処理の流れ:
+   (1) cv2.VideoCapture(0) でカメラを開く
+   (2) 3タスクを生成（create_face/pose/gesture）
+   (3) 毎フレーム:
+       a. フレーム取得 → BGR→RGB 変換 → mp.Image 作成
+       b. タイムスタンプ（単調増加、33ms 刻み）を付与
+       c. face_landmarker.detect_for_video(image, ts)
+       d. pose_landmarker.detect_for_video(image, ts)
+       e. gesture_recognizer.recognize_for_video(image, ts)
+       f. 各結果のランドマークをフレームに描画
+       g. FPS・検出状況のテキストをオーバーレイ表示
+       h. cv2.imshow() で表示、'q' キーで終了
+   (4) 終了時に全タスク close、カメラ release
+
+■ 描画の詳細
+
+  - 顔: FACEMESH_TESSELATION 接続でメッシュ状に描画（灰色の線、緑の点）
+  - 体: POSE_CONNECTIONS 接続で骨格を描画（水色の線、赤の点）
+  - 手: HAND_CONNECTIONS 接続で指の骨格を描画（黄色の線、紫の点）
+       + 認識されたジェスチャーラベルとスコアを手首付近にテキスト表示
+       + 左右の手のラベル（Left/Right）を表示
+
+  ※ MediaPipe Tasks API の出力 (NormalizedLandmark) は drawing_utils が
+    直接受け付けないため、landmark_pb2.NormalizedLandmarkList に変換する
+    ヘルパー関数 _to_landmark_list() を実装した。
+
+■ 実行モードの選択理由
+
+  VIDEO モード（同期処理）を採用した理由:
+  - LIVE_STREAM モードは非同期コールバックであり、3タスクの結果を
+    同一フレームで揃えて取得するのが困難
+  - VIDEO モードでは detect_for_video() が結果を同期的に返すため、
+    1フレームの処理内で3タスクの結果を順次取得できる
+  - タイムスタンプは単調増加であれば任意の値でよい
+
+■ FPS 表示
+  - 0.5 秒間隔でフレーム数から FPS を算出
+  - 画面左上に FPS と各タスクの検出数（Face/Pose/Hands）を表示
+
+■ 確認すべき項目（実行時）
+  - [ ] FPS が 15fps 以上出ているか
+  - [ ] 顔のメッシュが正しく描画されるか
+  - [ ] 体の骨格（肩・肘・手首など）が正しく描画されるか
+  - [ ] 両手のランドマークが正しく描画されるか
+  - [ ] ジェスチャーラベル（Open_Palm, Victory 等）が正しく表示されるか
+  - [ ] 1m の距離で頭〜腰が映り、腕を伸ばしても画面内に収まるか
+
+■ 実行方法
+  > cd MediaPipe
+  > venv\Scripts\activate
+  > cd gesture
+  > python main.py
+  （'q' キーで終了）
+
+■ 既知の注意点
+  - 3タスク同時実行は CPU 負荷が高い。FPS が不足する場合の対策:
+    (a) Pose Landmarker を Lite のまま維持（Full/Heavy は使わない）
+    (b) カメラの入力解像度を下げる（cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640) 等）
+    (c) Gesture Recognizer の num_hands を 1 に減らす
+  - Windows の日本語パス問題は model_asset_buffer 方式で回避済み
