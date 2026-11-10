@@ -1,0 +1,126 @@
+============================================================
+Stage 1 (I-1): キーボード模擬によるインタラクションフロー
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  ジェスチャー認識とは独立に、部品受け渡しのインタラクションフローを
+  キーボード入力で模擬実行できるようにする。
+  カメラ不要で状態遷移・シグナル出力・タイムアウトの動作を検証する。
+
+■ アーキテクチャ
+
+  キーボード入力 → Event → StateMachine → Signal → SignalBus → Sink(出力)
+
+  - Event: ジェスチャーに対応する入力 (WANT, YES, NO, CANCEL, POINT)
+  - 2段階検出: onset(動き始め) と confirm(確定) を分離
+  - Signal: システムの出力 (LISTENING, ACCEPT, OFFER_PART, ACK, HANDOVER 等)
+  - SignalBus: pub/sub パターンで Sink にブロードキャスト
+  - Sink: ConsoleSink (標準出力), JsonlSink (JSONL ファイル)
+
+■ 状態遷移図
+
+  IDLE → REQ_DETECTING → ACCEPTING → WAIT_REACTION → REACTION_DETECTING
+    ↑                                       ↓
+    ←──── HANDING_OVER ←── ACKING ←─────────┘ (YES)
+                                             ↓ (NO)
+                              CONFIRMING ← WAIT_POINTING
+
+■ 9 状態の説明
+
+  IDLE              待機中。WANT を待つ
+  REQ_DETECTING     WANT onset 後、confirm を待つ (3.0s timeout)
+  ACCEPTING         受諾動作実行中 (2.0s 模擬)
+  WAIT_REACTION     部品を提示し、YES/NO を待つ (5.0s timeout)
+  REACTION_DETECTING YES/NO onset 後、confirm を待つ (3.0s timeout)
+  WAIT_POINTING     NO 後、指さしを待つ (8.0s timeout)
+  CONFIRMING        復唱確認後、YES/NO を待つ (5.0s timeout)
+  ACKING            了解動作実行中 (2.0s 模擬)
+  HANDING_OVER      受け渡し動作実行中 (3.0s 模擬)
+
+■ タイムアウトと注意喚起
+  - WAIT_REACTION で timeout → ATTENTION シグナル
+  - ATTENTION が attention_max(3) 回に達すると IDLE に戻る
+  - その他の timeout はすべて IDLE に戻る (FLOW_RESET)
+
+■ キーマッピング
+
+  小文字 = confirm (動作確定)
+  大文字 = onset (動き始め)
+
+  w/W  WANT (ください)
+  y/Y  YES  (はい)
+  n/N  NO   (いいえ)
+  x    CANCEL (戻る)
+  1-5  POINT P1〜P5 (指さし)
+
+■ ファイル構成
+
+  gesture/
+  ├── config.yaml                タイムアウト・模擬時間・部品リスト
+  ├── run_flow_sim.py            エントリポイント (キーボード模擬)
+  ├── interaction/
+  │   ├── __init__.py
+  │   ├── events.py              イベント定義 (EventKind, Stage)
+  │   ├── signals.py             シグナル定義・SignalBus
+  │   ├── sinks.py               ConsoleSink, JsonlSink
+  │   ├── parts.py               部品リスト管理
+  │   ├── state_machine.py       状態機械 (遷移テーブル駆動)
+  │   ├── simulated.py           模擬動作完了タイマー
+  │   └── keyboard_input.py      キー → Event 変換
+  ├── tests/
+  │   └── test_state_machine.py  9テストシナリオ
+  └── logs/                      JSONL シグナルログ出力先
+
+■ 実行方法
+
+  cd gesture
+  ..\venv\Scripts\python run_flow_sim.py
+
+  実行すると対話プロンプトが表示される:
+    [IDLE] > w       ← WANT confirm を送信
+    [IDLE] > W       ← WANT onset を送信 (REQ_DETECTING に遷移)
+    [IDLE] > q       ← 終了
+
+■ テスト実行
+
+  cd MediaPipe
+  venv\Scripts\python -m pytest gesture/tests/test_state_machine.py -v
+
+  9シナリオ:
+  1. 正常フロー (WANT → YES → 受け渡し完了)
+  2. onset → confirm 2段階検出
+  3. REQ_DETECTING タイムアウト → IDLE
+  4. ACCEPTING 中の CANCEL → IDLE
+  5. NO → POINT → 復唱確認 → YES → 受け渡し
+  6. WAIT_REACTION タイムアウト → ATTENTION → IDLE
+  7. ACKING 中の CANCEL → WAIT_REACTION
+  8. REACTION_DETECTING タイムアウト → WAIT_REACTION
+  9. 全部品(P1〜P5)完了 → FLOW_COMPLETE
+
+■ 設計方針
+  - 遷移テーブルをデータ(辞書)として定義し、if-chain を排除
+  - スレッドセーフ (threading.Lock)
+  - タイムアウトは threading.Timer で非同期実行
+  - 模擬動作完了も Timer で実装 (将来ロボットアダプタに置換)
+  - SignalBus の pub/sub で出力先を疎結合化
+
+■ 設定 (config.yaml)
+
+  timeouts:
+    req_detecting: 3.0
+    wait_reaction: 5.0
+    attention_max: 3
+    reaction_detecting: 3.0
+    wait_pointing: 8.0
+    confirming: 5.0
+  simulated:
+    accept_duration: 2.0
+    ack_duration: 2.0
+    handover_duration: 3.0
+  parts: [P1, P2, P3, P4, P5]
+
+■ 今後のステージ
+  - Stage 2 (I-2): 実検出器と接続 (カメラ入力)
+  - Stage 3 (I-3): 指さし検出
+  - Stage 4 (I-4): ロボット・画面アダプタ

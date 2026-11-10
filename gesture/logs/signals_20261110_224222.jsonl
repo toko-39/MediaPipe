@@ -1,0 +1,6 @@
+{"time": 1794318142.9898667, "kind": "LISTENING", "payload": null}
+{"time": 1794318142.9899926, "kind": "ACCEPT", "payload": null}
+{"time": 1794318142.990334, "kind": "OFFER_PART", "payload": "P1"}
+{"time": 1794318142.9904022, "kind": "ACK", "payload": null}
+{"time": 1794318142.9904501, "kind": "HANDOVER", "payload": null}
+{"time": 1794318142.9904935, "kind": "FLOW_RESET", "payload": null}

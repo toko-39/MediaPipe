@@ -1,0 +1,8 @@
+{"time": 1794319753.6693335, "kind": "LISTENING", "payload": null}
+{"time": 1794319753.6694431, "kind": "ACCEPT", "payload": null}
+{"time": 1794319753.6697834, "kind": "OFFER_PART", "payload": "P3"}
+{"time": 1794319753.6698687, "kind": "CONFIRM_PART", "payload": "P3"}
+{"time": 1794319753.6699243, "kind": "CONFIRM_PART", "payload": "P2"}
+{"time": 1794319753.6699634, "kind": "ACK", "payload": null}
+{"time": 1794319753.670002, "kind": "HANDOVER", "payload": null}
+{"time": 1794319753.670045, "kind": "FLOW_RESET", "payload": null}

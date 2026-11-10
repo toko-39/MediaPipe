@@ -1,0 +1,83 @@
+============================================================
+起動方法まとめ
+============================================================
+最終更新: 2026-11-10
+
+■ 前提
+  - Python 仮想環境: MediaPipe/venv/
+  - 作業ディレクトリ: MediaPipe/gesture/
+
+  cd gesture
+
+
+■ 1. 動作検知のみ（Phase 4）
+
+  ..\venv\Scripts\python main.py
+
+  カメラで4動作をリアルタイム検出し、画面に結果を表示する。
+  フロー（状態機械）は動かない。
+
+  検出する動作:
+    - うなずき     → 「はい」(緑)
+    - 首横振り     → 「いいえ」(オレンジ)
+    - 手を差し出す → 「ください」(水色)
+    - 手を横に振る → 「戻る」(紫)
+
+  操作:
+    q     終了
+    r     記録の開始/停止
+    0-4   記録ラベル切替 (0:none 1:nod 2:shake 3:offer 4:wave_no)
+
+
+■ 2. フロー確認（キーボード模擬、カメラなし）
+
+  ..\venv\Scripts\python run_flow_sim.py
+
+  キーボード入力でインタラクションフローの状態遷移を確認する。
+  カメラ不要。タイムアウト無効（step_mode）。
+
+  操作:
+    w     WANT (ください) confirm
+    W     WANT onset
+    y     YES  (はい) confirm
+    Y     YES onset
+    n     NO   (いいえ) confirm
+    N     NO onset
+    x     CANCEL (戻る) confirm
+    1-5   POINT P1〜P5
+    空Enter / スペース  模擬動作を手動完了（次へ進む）
+    q     終了
+    ?     ヘルプ表示
+
+
+■ 3. 動作検知 + フロー（カメラ入力）
+
+  ..\venv\Scripts\python run_flow_camera.py --step
+
+  カメラのジェスチャー認識でインタラクションフローを駆動する。
+  --step を付けると模擬動作(ACCEPT/ACK/HANDOVER)はスペースで手動完了。
+
+  ジェスチャー → イベント変換:
+    offer (手を差し出す)   → WANT
+    nod   (うなずき)       → YES
+    shake (首横振り)       → NO
+    wave_no (手を横に振る) → CANCEL
+
+  操作:
+    q     終了
+    1-5   POINT P1〜P5 (指さしはキーボード模擬)
+    スペース  step_mode 時のみ、模擬動作を手動完了
+
+  画面表示:
+    左上  FPS / Face / Pose / Hands / Pitch / Yaw
+    左下  フロー状態 + 現在の部品 (例: 「反応待ち  部品: P3」)
+    右下  検出結果 (はい / いいえ / ください / 戻る)
+
+  通常モード（タイムアウト有効、自動進行）:
+    ..\venv\Scripts\python run_flow_camera.py
+
+
+■ テスト実行
+
+  cd MediaPipe
+  venv\Scripts\python -m pytest gesture/tests/test_state_machine.py -v

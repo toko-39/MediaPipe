@@ -1,0 +1,15 @@
+{"time": 1794320640.8789642, "kind": "LISTENING", "payload": null}
+{"time": 1794320640.8793411, "kind": "ACCEPT", "payload": null}
+{"time": 1794320649.080421, "kind": "OFFER_PART", "payload": "P5"}
+{"time": 1794320654.1948621, "kind": "ACK", "payload": null}
+{"time": 1794320657.483049, "kind": "HANDOVER", "payload": null}
+{"time": 1794320666.732193, "kind": "CONFIRM_PART", "payload": "P1"}
+{"time": 1794320670.7625306, "kind": "ACK", "payload": null}
+{"time": 1794320673.8203893, "kind": "HANDOVER", "payload": null}
+{"time": 1794320675.2863817, "kind": "FLOW_RESET", "payload": null}
+{"time": 1794320692.7041523, "kind": "LISTENING", "payload": null}
+{"time": 1794320692.704643, "kind": "ACCEPT", "payload": null}
+{"time": 1794320700.3579476, "kind": "OFFER_PART", "payload": "P3"}
+{"time": 1794320703.4980128, "kind": "FLOW_RESET", "payload": null}
+{"time": 1794320722.938245, "kind": "LISTENING", "payload": null}
+{"time": 1794320722.9385252, "kind": "ACCEPT", "payload": null}

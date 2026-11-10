@@ -1,0 +1,78 @@
+============================================================
+Stage 2 (I-2): カメラ入力によるインタラクションフロー
+============================================================
+実施日: 2026-11-10
+
+■ 目的
+  Stage 1 で構築した状態機械を、実際のカメラ映像による
+  ジェスチャー認識と接続し、動作検出でフローを駆動する。
+
+■ 検出→イベント変換
+
+  ジェスチャー           → イベント    → 意味
+  ─────────────────────────────────────────────
+  offer (手を差し出す)   → WANT        ください
+  nod   (うなずき)       → YES         はい
+  shake (首横振り)       → NO          いいえ
+  wave_no (手を横に振る) → CANCEL      戻る
+  (指さし: 未実装)       → POINT       部品指定
+
+  ※ 指さしは Stage 3 で実装予定。現在はキーボード(1-5)で模擬。
+
+■ CANCEL の受付タイミング
+
+  状態              x (CANCEL) の効果
+  ─────────────────────────────────────
+  WAIT_REACTION     → IDLE に戻る
+  ACKING            → WAIT_POINTING (NOをYESと誤解釈した場合の訂正)
+  HANDING_OVER      → WAIT_POINTING (同上)
+  CONFIRMING        → WAIT_POINTING (復唱確認のやり直し)
+  それ以外          → 無視
+
+■ 部品管理
+  - 部品リスト(config.yaml)からランダムに提示
+  - 順番・完了カウントなし（毎回ランダム選択）
+  - 指さし(POINT)は全部品を常に選択可能
+
+■ step_mode
+  --step オプションで有効化。
+  - タイムアウト・模擬動作タイマーを無効化
+  - スペースキーで模擬動作(ACCEPT/ACK/HANDOVER)を手動完了
+  - フローの確認・デバッグ用
+
+■ 画面表示
+  - 左上: FPS / Face / Pose / Hands / Pitch / Yaw
+  - 左下: フロー状態 + 現在の部品 (例: 「反応待ち  部品: P3」)
+  - 右下: 検出結果の日本語表示 (はい / いいえ / ください / 戻る)
+  - フロー状態はメイリオフォント 20pt で表示
+
+■ 追加ファイル
+
+  gesture/
+  └── run_flow_camera.py    カメラ入力 + フロー統合エントリポイント
+
+■ 実行方法
+
+  cd gesture
+
+  step_mode (タイムアウト無効、スペースで手動進行):
+    ..\venv\Scripts\python run_flow_camera.py --step
+
+  通常モード (タイムアウト有効、自動進行):
+    ..\venv\Scripts\python run_flow_camera.py
+
+  操作:
+    q     終了
+    1-5   POINT P1〜P5 (指さし模擬)
+    スペース  step_mode 時のみ、模擬動作を手動完了
+
+■ Stage 1 からの変更点
+  - PartsManager: 順番管理 → ランダム選択に変更
+  - CANCEL: ACCEPTING/ACKING のみ → 作業者の選択タイミングで受付
+  - ACKING/HANDING_OVER の CANCEL → WAIT_POINTING に遷移
+  - CONFIRMING の CANCEL → WAIT_POINTING に遷移
+  - FLOW_COMPLETE シグナル削除（完了カウントなし）
+
+■ 今後のステージ
+  - Stage 3 (I-3): 指さし検出
+  - Stage 4 (I-4): ロボット・画面アダプタ

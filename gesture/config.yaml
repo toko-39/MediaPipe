@@ -1,0 +1,24 @@
+# 部品受け渡しインタラクション設定
+
+# タイムアウト(秒)
+timeouts:
+  req_detecting: 3.0       # WANT onset 後、confirm が来ない場合
+  wait_reaction: 5.0       # 部品を示した後、反応がない場合(ATTENTION)
+  attention_max: 3          # ATTENTION の最大回数。超過で IDLE へ
+  reaction_detecting: 3.0   # YES/NO onset 後、confirm が来ない場合
+  wait_pointing: 8.0        # NO 後、指さしが来ない場合
+  confirming: 5.0            # 復唱確認後、返答がない場合
+
+# 模擬動作時間(秒) — SimulatedCompletion が ACTION_DONE を返すまでの時間
+simulated:
+  accept_duration: 2.0
+  ack_duration: 2.0
+  handover_duration: 3.0
+
+# 部品リスト(手順の順に候補として示す)
+parts:
+  - P1
+  - P2
+  - P3
+  - P4
+  - P5
