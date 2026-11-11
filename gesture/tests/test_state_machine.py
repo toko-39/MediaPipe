@@ -93,17 +93,18 @@ class TestReqTimeout:
 
 
 # ── シナリオ 4: ACCEPTING 中の CANCEL ──
+# Stage 2 で変更: ACCEPTING 中の CANCEL は無視される (遷移テーブルにエントリなし)
 
 class TestAcceptingCancel:
-    def test_cancel_during_accept(self, setup):
+    def test_cancel_during_accept_is_ignored(self, setup):
         sm, log = setup
 
         sm.handle(confirm(EventKind.WANT))
         assert sm.state == State.ACCEPTING
 
         sm.handle(confirm(EventKind.CANCEL))
-        assert sm.state == State.IDLE
-        assert SignalKind.FLOW_RESET in log
+        # Stage 2: ACCEPTING 中の CANCEL は無視され、状態は変わらない
+        assert sm.state == State.ACCEPTING
 
 
 # ── シナリオ 5: NO → POINT → CONFIRM ──
@@ -153,6 +154,7 @@ class TestAttention:
 
 
 # ── シナリオ 7: ACKING 中の CANCEL ──
+# Stage 2 で変更: ACKING 中の CANCEL → WAIT_POINTING に遷移 (WAIT_REACTION ではない)
 
 class TestAckingCancel:
     def test_cancel_during_ack(self, setup):
@@ -165,9 +167,8 @@ class TestAckingCancel:
         assert sm.state == State.ACKING
 
         sm.handle(confirm(EventKind.CANCEL))
-        assert sm.state == State.WAIT_REACTION
-        # OFFER_PART が再度出る
-        assert log.count(SignalKind.OFFER_PART) >= 2
+        # Stage 2: WAIT_POINTING に遷移 (NOをYESと誤解釈した場合の訂正)
+        assert sm.state == State.WAIT_POINTING
 
 
 # ── シナリオ 8: REACTION_DETECTING タイムアウト ──
@@ -187,19 +188,21 @@ class TestReactionDetectingTimeout:
         assert sm.state == State.WAIT_REACTION
 
 
-# ── シナリオ 9: 全部品完了 ──
+# ── シナリオ 9: 複数回の受け渡し ──
+# Stage 2 で変更: FLOW_COMPLETE 削除。完了カウントなし、毎回ランダム選択で IDLE に戻る
 
-class TestFlowComplete:
-    def test_all_parts_complete(self, setup):
+class TestMultipleHandovers:
+    def test_multiple_handovers_return_to_idle(self, setup):
         sm, log = setup
 
-        # 5部品を順に完了
-        for i in range(5):
+        # 3回受け渡しを実行し、毎回 IDLE に戻ることを確認
+        for i in range(3):
             sm.handle(confirm(EventKind.WANT))
             time.sleep(2.5)  # → WAIT_REACTION
             sm.handle(confirm(EventKind.YES))
             time.sleep(2.5)  # → HANDING_OVER
             time.sleep(3.5)  # → IDLE
+            assert sm.state == State.IDLE
 
-        assert sm.parts.is_complete
-        assert SignalKind.FLOW_COMPLETE in log
+        # FLOW_RESET が毎回発行される (FLOW_COMPLETE は存在しない)
+        assert log.count(SignalKind.FLOW_RESET) >= 3

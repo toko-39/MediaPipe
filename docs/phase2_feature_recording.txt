@@ -11,7 +11,9 @@ Phase 2: 特徴量の計算と記録
 ■ 実装ファイル
 
 1. gesture/features.py — 特徴量計算モジュール
-   以下の特徴量を毎フレーム計算する（全29カラム）:
+   以下の特徴量を毎フレーム計算する（全41カラム）:
+   ※ Phase 4以降で指さし関連の特徴量(左右各6項目)を追加し、
+     当初の29カラムから41カラムに増加した。
 
    [頭の回転] (Face Landmarker の facial_transformation_matrixes から算出)
    - head_pitch: 上下の傾き [度]。うなずきで変化する軸
@@ -34,12 +36,16 @@ Phase 2: 特徴量の計算と記録
    - shoulder_width: 肩幅（正規化座標での距離）
    → カメラとの距離に依存しない相対的な手の位置を得るため
 
-   [手の特徴量] (Gesture Recognizer、左右各8項目)
+   [手の特徴量] (Gesture Recognizer、左右各14項目)
    - {left,right}_hand_gesture:       ジェスチャーラベル (Open_Palm等)
    - {left,right}_hand_gesture_score: ジェスチャーの確信度
    - {left,right}_hand_wrist_x/y:     手のランドマーク上の手首位置
    - {left,right}_hand_size:           手の大きさ (手首→中指付け根の距離)
    - {left,right}_palm_normal_x/y/z:  手のひらの法線ベクトル
+   - {left,right}_fingertip_avg_x/y:  指先平均座標 (人差し指・中指・薬指)
+   - {left,right}_is_pointing:        指さし判定 (人差し指のみ伸展)
+   - {left,right}_point_angle:        指さし方向の角度 [度]
+   - {left,right}_index_dir_x/y:      人差し指の方向ベクトル
 
    手のひらの法線の算出方法:
      v1 = 手首(0) → 人差し指付け根(5) のベクトル

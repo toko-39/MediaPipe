@@ -20,7 +20,7 @@ class SignalKind(Enum):
     OFFER_PART = auto()      # 部品を提示 (payload=部品名)
     CONFIRM_PART = auto()    # 復唱確認 (payload=部品名)
     FLOW_RESET = auto()      # フローリセット (IDLE に戻った)
-    FLOW_COMPLETE = auto()   # 全部品完了
+    # FLOW_COMPLETE は Stage 2 で削除 (完了カウントなし、毎回ランダム選択)
 
 
 class Signal:

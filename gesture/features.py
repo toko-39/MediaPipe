@@ -128,9 +128,20 @@ def hand_features(gesture_result) -> list[dict]:
                 "gesture_score": float,
                 "wrist_x": float, "wrist_y": float,
                 "hand_size": float,  # 手首(0)→中指付け根(9) の距離
+                "fingertip_avg_x": float,  # 指先平均x (人差し指・中指・薬指)
+                "fingertip_avg_y": float,  # 指先平均y
                 "palm_normal_x": float,
                 "palm_normal_y": float,
                 "palm_normal_z": float,
+                # 指さし判定用 (Phase 4以降で追加)
+                "index_extended": bool,    # 人差し指が伸びているか
+                "middle_extended": bool,   # 中指が伸びているか
+                "ring_extended": bool,     # 薬指が伸びているか
+                "pinky_extended": bool,    # 小指が伸びているか
+                "is_pointing": bool,       # 指さし判定 (人差し指のみ伸展)
+                "point_angle": float|None, # 指さし方向の角度 [度]
+                "index_dir_x": float,      # 人差し指の方向ベクトルx
+                "index_dir_y": float,      # 人差し指の方向ベクトルy
             },
             ...
         ]
